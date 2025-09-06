@@ -1,51 +1,95 @@
-// src/App.jsx
-import { useEffect, useState } from "react";
-import { fetchSheetData } from "./utils/fetchSheetData";
+import { useState, useEffect } from "react";
+import { fetchCSVData } from "./utils/fetchSheetData";
+
+// Replace with your published CSV links
+const NODES_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
+const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
 
 function App() {
-  const [nodes, setNodes] = useState([]); // Will hold rows from Google Sheet
+  const [agents, setAgents] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState("");
+  const [nodes, setNodes] = useState([]);
+  const [currentNodeId, setCurrentNodeId] = useState("start"); // assuming start node ID
+  const [history, setHistory] = useState([]); // To store navigation history
 
-  // Load CSV data from Google Sheet on component mount
+  // Load CSV data
   useEffect(() => {
-    async function loadData() {
-      const sheetRows = await fetchSheetData();
-      setNodes(sheetRows);
-    }
-
-    loadData();
+    fetchCSVData(AGENTS_CSV).then(setAgents);
+    fetchCSVData(NODES_CSV).then(setNodes);
   }, []);
 
-  return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h1>Dynamic Decision Tree</h1>
+  // Get current node data based on ID
+  const currentNode = nodes.find(node => node[0] === currentNodeId);
 
-      {nodes.length === 0 ? (
-        <p>Loading...</p>
-      ) : (
-        nodes.map((row, index) => (
-          <div
-            key={index}
-            style={{
-              marginBottom: "10px",
-              border: "1px solid #ccc",
-              padding: "10px",
-              borderRadius: "5px",
-              backgroundColor: "#f9f9f9",
-            }}
+  // Handle node button click
+  const handleNodeClick = (nextNodeId) => {
+    setHistory(prev => [...prev, currentNodeId]); // Add current node to history
+    setCurrentNodeId(nextNodeId);
+  };
+
+  // Handle back button click
+  const handleBackClick = () => {
+    if (history.length === 0) return;
+    const previousNodeId = history[history.length - 1];
+    setHistory(prev => prev.slice(0, prev.length - 1));
+    setCurrentNodeId(previousNodeId);
+  };
+
+  // Render agent selection
+  if (!selectedAgent) {
+    return (
+      <div style={{ padding: "20px" }}>
+        <h2>Select your agent name:</h2>
+        {agents.map((agent, idx) => (
+          <button
+            key={idx}
+            style={{ margin: "5px", padding: "10px 20px" }}
+            onClick={() => setSelectedAgent(agent[0])}
           >
-            <strong>Node Label:</strong> {row[1]} <br />
-            {row[2] && (
-              <>
-                <strong>Option:</strong> {row[2]} <br />
-              </>
-            )}
-            {row[3] && (
-              <>
-                <strong>Next Node ID:</strong> {row[3]}
-              </>
-            )}
+            {agent[0]}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // Render decision tree nodes
+  return (
+    <div style={{ padding: "20px" }}>
+      <h2>Welcome, {selectedAgent}!</h2>
+      {currentNode ? (
+        <div>
+          <h3>{currentNode[1]}</h3>
+          <div style={{ marginTop: "15px" }}>
+            {currentNode.slice(2).map((nextNodeId, idx) => (
+              <button
+                key={idx}
+                style={{ margin: "5px", padding: "10px 20px" }}
+                onClick={() => handleNodeClick(nextNodeId)}
+              >
+                {nextNodeId}
+              </button>
+            ))}
           </div>
-        ))
+          {history.length > 0 && (
+            <button
+              style={{ marginTop: "15px", padding: "10px 20px" }}
+              onClick={handleBackClick}
+            >
+              Back
+            </button>
+          )}
+        </div>
+      ) : (
+        <div>
+          <h3>End of this path</h3>
+          <button
+            style={{ marginTop: "15px", padding: "10px 20px" }}
+            onClick={() => setCurrentNodeId("start")}
+          >
+            Restart
+          </button>
+        </div>
       )}
     </div>
   );
