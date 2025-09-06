@@ -8,96 +8,63 @@ function App() {
   const [currentNode, setCurrentNode] = useState(null);
   const [history, setHistory] = useState([]);
 
-  // Apps Script URLs
-  const AGENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
-  const NODES_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
+  const AGENTS_URL = "https://script.google.com/macros/s/AKfycbw8WDVWIrZDuVn2n33Np-Rxd-FRDJzOQDpj_beR0qudLdXxoJg5M4lkQxSKEkz6t6am/exec?data=agents";
+  const NODES_URL = "https://script.google.com/macros/s/AKfycbw8WDVWIrZDuVn2n33Np-Rxd-FRDJzOQDpj_beR0qudLdXxoJg5M4lkQxSKEkz6t6am/exec?data=decisiontree";
 
+  // Fetch agents
   useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const res = await axios.get(AGENTS_URL);
+        if (Array.isArray(res.data)) setAgents(res.data);
+      } catch (err) {
+        console.error("Error fetching agents:", err);
+      }
+    };
     fetchAgents();
+  }, []);
+
+  // Fetch decision tree nodes
+  useEffect(() => {
+    const fetchNodes = async () => {
+      try {
+        const res = await axios.get(NODES_URL);
+        setNodes(res.data);
+      } catch (err) {
+        console.error("Error fetching nodes:", err);
+      }
+    };
     fetchNodes();
   }, []);
 
-  const fetchAgents = async () => {
-    try {
-      const res = await axios.get(AGENTS_URL);
-      if (Array.isArray(res.data)) setAgents(res.data);
-    } catch (err) {
-      console.error("Error fetching agents:", err);
-    }
-  };
-
-  const fetchNodes = async () => {
-    try {
-      const res = await axios.get(NODES_URL);
-      if (Array.isArray(res.data)) setNodes(res.data);
-    } catch (err) {
-      console.error("Error fetching nodes:", err);
-    }
-  };
-
   const handleAgentSelect = (agent) => {
     setSelectedAgent(agent);
-    // Start at NodeID 1
-    const node1 = nodes.find((n) => n.NodeID === 1);
-    setCurrentNode(node1);
-    setHistory([node1]);
-  };
-
-  const handleOptionClick = (option) => {
-    if (!option.NextNodeID) return;
-
-    const nextNode =
-      option.OptionType === "RESTART"
-        ? null
-        : nodes.find((n) => n.NodeID === option.NextNodeID);
-
-    if (option.OptionType === "MESSAGE") {
-      alert("Message: " + option.Option);
-    }
-
-    setCurrentNode(nextNode);
-    setHistory((prev) => (nextNode ? [...prev, nextNode] : prev));
-
-    // Optionally, log action to Google Sheet via POST
-    logAction({
-      Agent: selectedAgent,
-      Action: "Selected Option",
-      NodeID: option.NodeID,
-      Label: option.Label,
-      OptionSelected: option.Option,
-      NextNodeID: option.NextNodeID,
-    });
-  };
-
-  const handleBack = () => {
-    if (history.length <= 1) return;
-    const newHistory = history.slice(0, history.length - 1);
-    setHistory(newHistory);
-    setCurrentNode(newHistory[newHistory.length - 1]);
-  };
-
-  const handleRestart = () => {
-    setSelectedAgent(null);
-    setCurrentNode(null);
+    const firstNode = nodes.find(n => n.NodeID === "1");
+    setCurrentNode(firstNode || null);
     setHistory([]);
   };
 
-  const logAction = async (data) => {
-    try {
-      await axios.post("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", data);
-    } catch (err) {
-      console.error("Error logging action:", err);
+  const handleOptionSelect = (node) => {
+    if (node.OptionType === "RESTART") {
+      setSelectedAgent(null);
+      setCurrentNode(null);
+      setHistory([]);
+      return;
     }
+
+    setHistory([...history, currentNode]);
+    const next = nodes.find(n => n.NodeID === String(node.NextNodeID));
+    setCurrentNode(next || null);
   };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial" }}>
-      <h2>Dynamic Decision Tree</h2>
+    <div style={{ padding: "20px" }}>
+      <h1>Dynamic Decision Tree</h1>
 
       {!selectedAgent && (
         <div>
-          <h3>Select Agent</h3>
-          {agents.map((agent) => (
+          <h2>Select Agent</h2>
+          {agents.map(agent => (
             <button
               key={agent}
               onClick={() => handleAgentSelect(agent)}
@@ -111,40 +78,40 @@ function App() {
 
       {selectedAgent && currentNode && (
         <div>
-          <h3>Agent: {selectedAgent}</h3>
-          <p>
-            <strong>{currentNode.Label}</strong>
-          </p>
-          {nodes
-            .filter((n) => n.NodeID === currentNode.NodeID)
-            .map((node) => (
-              <div key={node.Option + node.NextNodeID}>
-                {node.OptionType === "MESSAGE" ? (
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(node.Option);
-                      alert("Message copied!");
-                    }}
-                    style={{ margin: "5px", padding: "10px" }}
-                  >
-                    {node.Option}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleOptionClick(node)}
-                    style={{ margin: "5px", padding: "10px" }}
-                  >
-                    {node.Option}
-                  </button>
-                )}
-              </div>
-            ))}
-          <div style={{ marginTop: "20px" }}>
-            <button onClick={handleBack} style={{ marginRight: "10px" }}>
+          <h3>{currentNode.Label}</h3>
+          {currentNode.OptionType === "MESSAGE" ? (
+            <div>
+              <p>{currentNode.Option}</p>
+              <button onClick={() => {
+                navigator.clipboard.writeText(currentNode.Option);
+                alert("Message copied!");
+              }}>Copy Message</button>
+            </div>
+          ) : (
+            nodes
+              .filter(n => n.NodeID === currentNode.NodeID)
+              .map(option => (
+                <button
+                  key={option.Option}
+                  onClick={() => handleOptionSelect(option)}
+                  style={{ margin: "5px", padding: "10px" }}
+                >
+                  {option.Option}
+                </button>
+              ))
+          )}
+          {history.length > 0 && (
+            <button
+              style={{ marginTop: "10px" }}
+              onClick={() => {
+                const prev = history.pop();
+                setCurrentNode(prev);
+                setHistory([...history]);
+              }}
+            >
               Back
             </button>
-            <button onClick={handleRestart}>Restart</button>
-          </div>
+          )}
         </div>
       )}
     </div>
