@@ -1,72 +1,83 @@
 import React, { useState, useEffect } from "react";
-import { fetchSheetData } from "./utils/fetchSheetData"; // Ensure this is a named export
-import "./App.css"; // optional: your styles
+import { fetchSheetData } from "./utils/fetchSheetData";
 
 function App() {
   const [agents, setAgents] = useState([]);
-  const [selectedAgent, setSelectedAgent] = useState("");
   const [nodes, setNodes] = useState([]);
-  const [currentNodeIndex, setCurrentNodeIndex] = useState(0);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [currentNodeIndex, setCurrentNodeIndex] = useState(null);
   const [history, setHistory] = useState([]);
 
+  // Load agents and decision tree
   useEffect(() => {
-    async function loadAgents() {
-      const agentData = await fetchSheetData("agents");
-      setAgents(agentData);
+    async function loadData() {
+      const agentsData = await fetchSheetData("agents");
+      const nodesData = await fetchSheetData("decisiontree");
+      setAgents(agentsData);
+      setNodes(nodesData);
     }
-
-    async function loadNodes() {
-      const nodeData = await fetchSheetData("decisiontree");
-      setNodes(nodeData);
-    }
-
-    loadAgents();
-    loadNodes();
+    loadData();
   }, []);
 
+  // Start decision tree after agent selection
   const handleAgentSelect = (agent) => {
     setSelectedAgent(agent);
-    setCurrentNodeIndex(0);
+
+    const firstNodeIndex = nodes.findIndex((n) => n.NodeID === "1");
+    setCurrentNodeIndex(firstNodeIndex >= 0 ? firstNodeIndex : 0);
     setHistory([]);
   };
 
+  // Handle option click
   const handleOptionClick = (option) => {
+    if (option.OptionType === "MESSAGE") return;
+
     const nextNodeId = option.NextNodeID;
     const currentNode = nodes[currentNodeIndex];
-    setHistory([...history, currentNodeIndex]); // store current node index in history
+    setHistory([...history, currentNodeIndex]);
 
-    // Find the index of the next node
-    const nextIndex = nodes.findIndex((node) => node.NodeID === nextNodeId);
-    if (nextIndex !== -1) {
-      setCurrentNodeIndex(nextIndex);
+    if (nextNodeId) {
+      const nextIndex = nodes.findIndex((n) => n.NodeID === nextNodeId);
+      if (nextIndex !== -1) {
+        setCurrentNodeIndex(nextIndex);
+      }
     }
   };
 
+  // Back button
   const handleBack = () => {
-    if (history.length === 0) return;
-    const previousIndex = history[history.length - 1];
-    setCurrentNodeIndex(previousIndex);
-    setHistory(history.slice(0, history.length - 1));
+    if (history.length > 0) {
+      const lastIndex = history[history.length - 1];
+      setHistory(history.slice(0, -1));
+      setCurrentNodeIndex(lastIndex);
+    }
   };
 
+  // Restart button
   const handleRestart = () => {
-    setSelectedAgent("");
-    setCurrentNodeIndex(0);
+    setSelectedAgent(null);
+    setCurrentNodeIndex(null);
     setHistory([]);
   };
 
-  const handleCopy = (text) => {
-    navigator.clipboard.writeText(text).then(() => {
+  // Copy message
+  const handleCopyMessage = (message) => {
+    navigator.clipboard.writeText(message).then(() => {
       alert("Message copied to clipboard!");
     });
   };
 
+  // Render agent selection
   if (!selectedAgent) {
     return (
-      <div className="container">
-        <h2>Select Agent</h2>
-        {agents.map((agent) => (
-          <button key={agent} onClick={() => handleAgentSelect(agent)}>
+      <div className="p-6">
+        <h2 className="text-xl font-bold mb-4">Select Agent</h2>
+        {agents.map((agent, index) => (
+          <button
+            key={index}
+            onClick={() => handleAgentSelect(agent)}
+            className="block bg-blue-500 text-white px-4 py-2 rounded mb-2"
+          >
             {agent}
           </button>
         ))}
@@ -74,44 +85,57 @@ function App() {
     );
   }
 
+  // Render decision tree
   const currentNode = nodes[currentNodeIndex];
+  if (!currentNode) return <div>Loading decision tree...</div>;
 
-  if (!currentNode) {
-    return (
-      <div className="container">
-        <h2>End of decision tree</h2>
-        <button onClick={handleRestart}>Restart</button>
-      </div>
-    );
-  }
+  // Find all options for this node
+  const options = nodes.filter((n) => n.NodeID === currentNode.NodeID);
 
   return (
-    <div className="container">
-      <h2>{currentNode.Label}</h2>
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-4">
+        Agent: {selectedAgent}
+      </h2>
+      <h3 className="text-lg mb-4">{currentNode.Label}</h3>
 
-      {currentNode.OptionType === "MESSAGE" ? (
-        <div>
-          <p>{currentNode.Option}</p>
-          <button onClick={() => handleCopy(currentNode.Option)}>Copy</button>
-          <button onClick={handleRestart}>Restart</button>
-        </div>
-      ) : (
-        <div>
-          {nodes
-            .filter((node) => node.NodeID === currentNode.NodeID)
-            .map((node) => (
+      {options.map((opt, index) => (
+        <div key={index} className="mb-2">
+          {opt.OptionType === "MESSAGE" ? (
+            <div className="p-3 border rounded bg-gray-100">
+              <p className="mb-2">{opt.Label}</p>
               <button
-                key={node.Option}
-                onClick={() => handleOptionClick(node)}
+                onClick={() => handleCopyMessage(opt.Label)}
+                className="bg-green-500 text-white px-3 py-1 rounded"
               >
-                {node.Option}
+                Copy Message
               </button>
-            ))}
+            </div>
+          ) : (
+            <button
+              onClick={() => handleOptionClick(opt)}
+              className="block bg-blue-500 text-white px-4 py-2 rounded mb-2"
+            >
+              {opt.Option}
+            </button>
+          )}
         </div>
-      )}
+      ))}
 
-      <div style={{ marginTop: "20px" }}>
-        {history.length > 0 && <button onClick={handleBack}>Back</button>}
+      <div className="mt-4 space-x-2">
+        <button
+          onClick={handleBack}
+          disabled={history.length === 0}
+          className="bg-gray-500 text-white px-3 py-1 rounded disabled:opacity-50"
+        >
+          Back
+        </button>
+        <button
+          onClick={handleRestart}
+          className="bg-red-500 text-white px-3 py-1 rounded"
+        >
+          Restart
+        </button>
       </div>
     </div>
   );
