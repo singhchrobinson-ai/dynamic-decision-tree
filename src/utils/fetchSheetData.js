@@ -1,24 +1,16 @@
 import axios from "axios";
 
-export async function fetchSheetData(type) {
-  const urls = {
-    decisiontree: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv",
-    agents: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv",
-  };
-
+export async function fetchSheetData(sheetUrl) {
   try {
-    const response = await axios.get(urls[type]);
+    const response = await axios.get(sheetUrl);
     const rows = response.data.split("\n").map((row) => row.split(","));
+    const headers = rows[0].map((h) => h.trim());
 
-    if (type === "agents") {
-      return rows.flat().filter(Boolean); // returns array of agent names
-    }
-
-    // For decision tree, map CSV into objects
-    const headers = ["NodeID", "Label", "Option", "NextNodeID", "OptionType"];
-    return rows.map((r) => {
+    return rows.slice(1).map((row) => {
       let obj = {};
-      headers.forEach((h, i) => obj[h] = r[i] || "");
+      headers.forEach((header, i) => {
+        obj[header] = row[i]?.trim();
+      });
       return obj;
     });
   } catch (error) {
