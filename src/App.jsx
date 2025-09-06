@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-// Replace these with your published CSV URLs
-const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
-const DECISION_TREE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
+const AGENTS_CSV = "YOUR_AGENTS_SHEET_CSV_LINK";
+const DECISION_TREE_CSV = "YOUR_DECISION_TREE_SHEET_CSV_LINK";
 
-// Utility to fetch CSV and parse into arrays of objects
-async function fetchSheetData(url) {
+async function fetchCSV(url) {
   try {
     const response = await axios.get(url);
     const rows = response.data.split("\n").map(r => r.split(","));
@@ -16,13 +14,12 @@ async function fetchSheetData(url) {
       headers.forEach((h, i) => {
         obj[h.trim()] = r[i]?.trim();
       });
-      // Convert NodeID and NextNodeID to numbers
       if (obj.NodeID) obj.NodeID = Number(obj.NodeID);
       if (obj.NextNodeID) obj.NextNodeID = Number(obj.NextNodeID);
       return obj;
     });
-  } catch (error) {
-    console.error("Error fetching sheet data:", error);
+  } catch (err) {
+    console.error("Error fetching CSV:", err);
     return [];
   }
 }
@@ -34,30 +31,24 @@ function App() {
   const [currentNode, setCurrentNode] = useState(null);
   const [history, setHistory] = useState([]);
 
-  // Load agents and nodes on mount
   useEffect(() => {
-    fetchSheetData(AGENTS_CSV).then(setAgents);
-    fetchSheetData(DECISION_TREE_CSV).then(setNodes);
+    fetchCSV(AGENTS_CSV).then(setAgents);
+    fetchCSV(DECISION_TREE_CSV).then(setNodes);
   }, []);
 
-  // When agent is selected, start with first node (NodeID=1)
   useEffect(() => {
-    if (agent && nodes.length > 0) {
+    if (agent && nodes.length > 0 && !currentNode) {
       const firstNode = nodes.find(n => n.NodeID === 1);
       setCurrentNode(firstNode);
-      setHistory([]);
     }
-  }, [agent, nodes]);
-
-  if (!agents.length || !nodes.length) return <div>Loading...</div>;
+  }, [agent, nodes, currentNode]);
 
   const handleAgentSelect = (name) => {
     setAgent(name);
   };
 
   const handleNext = (option) => {
-    // Log the action to Google Sheets via Apps Script endpoint (adjust URL)
-    axios.post("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", {
+    axios.post("YOUR_APPS_SCRIPT_WEB_APP_URL", {
       Agent: agent,
       NodeID: option.NodeID,
       Label: option.Label,
@@ -66,30 +57,31 @@ function App() {
       Action: "Selected"
     }).catch(console.error);
 
-    // Update history for back button
     setHistory(prev => [...prev, currentNode]);
 
-    // Move to next node
     const nextNode = nodes.find(n => n.NodeID === option.NextNodeID);
     setCurrentNode(nextNode);
   };
 
   const handleBack = () => {
-    const prev = [...history];
-    const lastNode = prev.pop();
-    setHistory(prev);
+    const prevHistory = [...history];
+    const lastNode = prevHistory.pop();
+    setHistory(prevHistory);
     setCurrentNode(lastNode);
   };
 
   const handleRestart = () => {
-    setCurrentNode(nodes.find(n => n.NodeID === 1));
+    const firstNode = nodes.find(n => n.NodeID === 1);
+    setCurrentNode(firstNode);
     setHistory([]);
   };
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
-    alert("Message copied to clipboard!");
+    alert("Message copied!");
   };
+
+  if (!agents.length || !nodes.length) return <div>Loading...</div>;
 
   if (!agent) {
     return (
@@ -107,7 +99,7 @@ function App() {
   if (!currentNode) {
     return (
       <div>
-        <h2>No Node Found</h2>
+        <h2>No node found</h2>
         <button onClick={handleRestart}>Restart</button>
       </div>
     );
@@ -130,9 +122,12 @@ function App() {
               </div>
             );
           }
-          // Regular option button
           return (
-            <button key={opt.Option} onClick={() => handleNext(opt)} style={{ display: "block", margin: "5px 0" }}>
+            <button
+              key={opt.Option}
+              onClick={() => handleNext(opt)}
+              style={{ display: "block", margin: "5px 0" }}
+            >
               {opt.Option}
             </button>
           );
