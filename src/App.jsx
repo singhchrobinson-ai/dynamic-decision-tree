@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { fetchSheetData } from "./utils/fetchSheetData";
+import axios from "axios";
+
+// Replace with your deployed Google Apps Script URL
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec";
 
 function App() {
   const [agents, setAgents] = useState([]);
@@ -19,21 +23,39 @@ function App() {
     loadData();
   }, []);
 
+  // Send logs to Google Sheet
+  const logAction = async (action, node, option) => {
+    try {
+      await axios.post(SCRIPT_URL, {
+        Agent: selectedAgent,
+        Action: action,
+        NodeID: node?.NodeID || "",
+        Label: node?.Label || "",
+        OptionSelected: option?.Option || option?.Label || "",
+        NextNodeID: option?.NextNodeID || ""
+      });
+    } catch (err) {
+      console.error("Logging failed:", err);
+    }
+  };
+
   // Start decision tree after agent selection
   const handleAgentSelect = (agent) => {
     setSelectedAgent(agent);
-
     const firstNodeIndex = nodes.findIndex((n) => n.NodeID === "1");
     setCurrentNodeIndex(firstNodeIndex >= 0 ? firstNodeIndex : 0);
     setHistory([]);
+    logAction("agentSelected", null, { Option: agent });
   };
 
   // Handle option click
   const handleOptionClick = (option) => {
+    const currentNode = nodes[currentNodeIndex];
+    logAction("selectOption", currentNode, option);
+
     if (option.OptionType === "MESSAGE") return;
 
     const nextNodeId = option.NextNodeID;
-    const currentNode = nodes[currentNodeIndex];
     setHistory([...history, currentNodeIndex]);
 
     if (nextNodeId) {
@@ -50,20 +72,23 @@ function App() {
       const lastIndex = history[history.length - 1];
       setHistory(history.slice(0, -1));
       setCurrentNodeIndex(lastIndex);
+      logAction("back", nodes[lastIndex], {});
     }
   };
 
   // Restart button
   const handleRestart = () => {
+    logAction("restart", nodes[currentNodeIndex], {});
     setSelectedAgent(null);
     setCurrentNodeIndex(null);
     setHistory([]);
   };
 
   // Copy message
-  const handleCopyMessage = (message) => {
+  const handleCopyMessage = (message, node) => {
     navigator.clipboard.writeText(message).then(() => {
       alert("Message copied to clipboard!");
+      logAction("copyMessage", node, { Label: message });
     });
   };
 
@@ -94,9 +119,7 @@ function App() {
 
   return (
     <div className="p-6">
-      <h2 className="text-xl font-bold mb-4">
-        Agent: {selectedAgent}
-      </h2>
+      <h2 className="text-xl font-bold mb-4">Agent: {selectedAgent}</h2>
       <h3 className="text-lg mb-4">{currentNode.Label}</h3>
 
       {options.map((opt, index) => (
@@ -105,7 +128,7 @@ function App() {
             <div className="p-3 border rounded bg-gray-100">
               <p className="mb-2">{opt.Label}</p>
               <button
-                onClick={() => handleCopyMessage(opt.Label)}
+                onClick={() => handleCopyMessage(opt.Label, currentNode)}
                 className="bg-green-500 text-white px-3 py-1 rounded"
               >
                 Copy Message
