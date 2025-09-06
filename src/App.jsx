@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const AGENTS_CSV = "YOUR_AGENTS_SHEET_CSV_LINK";
-const DECISION_TREE_CSV = "YOUR_DECISION_TREE_SHEET_CSV_LINK";
+const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
+const DECISION_TREE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
 
 async function fetchCSV(url) {
   try {
@@ -48,7 +48,7 @@ function App() {
   };
 
   const handleNext = (option) => {
-    axios.post("YOUR_APPS_SCRIPT_WEB_APP_URL", {
+    axios.post("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", {
       Agent: agent,
       NodeID: option.NodeID,
       Label: option.Label,
