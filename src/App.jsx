@@ -1,101 +1,90 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useState, useEffect } from "react";
 import { fetchSheetData } from "./utils/fetchSheetData";
-
-const WEB_APP_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL"; // Replace with your Apps Script Web App URL
 
 function App() {
   const [agents, setAgents] = useState([]);
-  const [selectedAgent, setSelectedAgent] = useState(null);
-
   const [nodes, setNodes] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState("");
   const [currentNodeIndex, setCurrentNodeIndex] = useState(0);
   const [history, setHistory] = useState([]);
 
-  // Fetch agents on load
   useEffect(() => {
-    const fetchAgents = async () => {
-      const data = await fetchSheetData("agents");
-      setAgents(data);
-    };
-    fetchAgents();
+    // Fetch Agents and Nodes
+    async function fetchData() {
+      const agentData = await fetchSheetData("agents");
+      setAgents(agentData);
+
+      const nodeData = await fetchSheetData("decisiontree");
+      setNodes(nodeData);
+    }
+    fetchData();
   }, []);
 
-  // Fetch decision tree nodes after agent is selected
-  useEffect(() => {
-    if (selectedAgent) {
-      const fetchNodes = async () => {
-        const data = await fetchSheetData("decisiontree");
-        setNodes(data);
-      };
-      fetchNodes();
-    }
-  }, [selectedAgent]);
-
-  // Log node actions to Google Sheets
-  const logAction = async (node, optionSelected) => {
-    try {
-      await axios.post(WEB_APP_URL, {
-        Agent: selectedAgent,
-        Action: "Node Selection",
-        NodeID: node.NodeID,
-        Label: node.Label,
-        OptionSelected: optionSelected,
-        NextNodeID: node.NextNodeID,
-      });
-    } catch (error) {
-      console.error("Error logging action:", error);
-    }
-  };
-
-  // Handle agent selection
   const handleAgentSelect = (agent) => {
     setSelectedAgent(agent);
-    setCurrentNodeIndex(0); // Start at first node
-    setHistory([]);
-  };
-
-  // Handle option click
-  const handleOptionClick = (option) => {
-    const currentNode = nodes[currentNodeIndex];
-    logAction(currentNode, option);
-    setHistory([...history, currentNodeIndex]);
-    if (currentNodeIndex < nodes.length - 1) {
-      setCurrentNodeIndex(currentNodeIndex + 1);
-    } else {
-      alert("End of Decision Tree");
-    }
-  };
-
-  // Go back to previous node
-  const handleBack = () => {
-    if (history.length === 0) return;
-    const lastIndex = history[history.length - 1];
-    setCurrentNodeIndex(lastIndex);
-    setHistory(history.slice(0, -1));
-  };
-
-  // Restart the session
-  const handleRestart = () => {
-    setSelectedAgent(null);
     setCurrentNodeIndex(0);
     setHistory([]);
   };
 
-  // Current node
   const currentNode = nodes[currentNodeIndex];
 
+  const handleOptionClick = (selectedOption) => {
+    if (!currentNode) return;
+
+    const nextNodeID = currentNode.NextNodeID;
+    const nextIndex = nodes.findIndex((n) => n.NodeID === nextNodeID);
+
+    // Update history for back button
+    setHistory([...history, currentNodeIndex]);
+
+    // Move to next node or reset if no next node
+    if (nextIndex !== -1) {
+      setCurrentNodeIndex(nextIndex);
+    } else {
+      setCurrentNodeIndex(nodes.length); // end node
+    }
+
+    // Log action to Google Sheet
+    logAction(selectedAgent, currentNode, selectedOption);
+  };
+
+  const handleBack = () => {
+    if (history.length === 0) return;
+    const prevIndex = history[history.length - 1];
+    setCurrentNodeIndex(prevIndex);
+    setHistory(history.slice(0, -1));
+  };
+
+  const handleRestart = () => {
+    setCurrentNodeIndex(0);
+    setHistory([]);
+  };
+
+  const logAction = async (agent, node, option) => {
+    try {
+      await fetch("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", {
+        method: "POST",
+        body: JSON.stringify({
+          Agent: agent,
+          NodeID: node.NodeID,
+          Label: node.Label,
+          OptionSelected: option,
+          NextNodeID: node.NextNodeID,
+          Action: "Option Selected",
+        }),
+      });
+    } catch (err) {
+      console.error("Logging failed:", err);
+    }
+  };
+
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial" }}>
+    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
       {!selectedAgent ? (
         <div>
-          <h2>Select Agent:</h2>
-          {agents.map((agent) => (
-            <button
-              key={agent}
-              onClick={() => handleAgentSelect(agent)}
-              style={{ margin: "5px", padding: "10px 20px" }}
-            >
+          <h2>Select Agent</h2>
+          {agents.map((agent, idx) => (
+            <button key={idx} onClick={() => handleAgentSelect(agent)}>
               {agent}
             </button>
           ))}
@@ -103,28 +92,55 @@ function App() {
       ) : (
         <div>
           <h2>Agent: {selectedAgent}</h2>
+
           {currentNode ? (
-            <div>
-              <h3>{currentNode.Label}</h3>
-              {currentNode.Option ? (
-                <button
-                  onClick={() => handleOptionClick(currentNode.Option)}
-                  style={{ margin: "5px", padding: "10px 20px" }}
-                >
-                  {currentNode.Option}
-                </button>
-              ) : (
-                <p>No options available</p>
-              )}
-              <div style={{ marginTop: "10px" }}>
-                <button onClick={handleBack} style={{ marginRight: "10px" }}>
-                  Back
-                </button>
+            <div style={{ marginTop: "1rem" }}>
+              {currentNode.Option === "MESSAGE" ? (
+                <div>
+                  <p>{currentNode.Label}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(currentNode.Label)
+                        .then(() => alert("Message copied to clipboard!"))
+                        .catch((err) => console.error("Copy failed:", err));
+                    }}
+                  >
+                    Copy Message
+                  </button>
+                  <button onClick={() => handleOptionClick("MESSAGE")}>
+                    Next
+                  </button>
+                </div>
+              ) : currentNode.Option === "RESTART" ? (
                 <button onClick={handleRestart}>Restart</button>
-              </div>
+              ) : (
+                <div>
+                  <p>{currentNode.Label}</p>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {nodes
+                      .filter((n) => n.NodeID === currentNode.NodeID)
+                      .map((n, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleOptionClick(n.Option)}
+                        >
+                          {n.Option}
+                        </button>
+                      ))}
+                  </div>
+                  <div style={{ marginTop: "1rem" }}>
+                    {history.length > 0 && (
+                      <button onClick={handleBack}>Back</button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <p>Loading nodes...</p>
+            <div>
+              <p>End of Nodes</p>
+              <button onClick={handleRestart}>Restart</button>
+            </div>
           )}
         </div>
       )}
