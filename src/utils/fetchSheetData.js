@@ -1,6 +1,6 @@
 export async function getDecisionTreeData() {
   try {
-    const response = await fetch("YOUR_CSV_LINK"); // replace with your CSV link
+    const response = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv"); // replace with your CSV link
     const csv = await response.text();
 
     const rows = csv.split("\n").map(row => row.split(","));
