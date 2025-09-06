@@ -2,8 +2,7 @@ export async function getDecisionTreeData() {
   try {
     const response = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv");
     const csv = await response.text();
-
-    // Convert CSV → JSON
+    // parse CSV into JSON
     const rows = csv.split("\n").map(row => row.split(","));
     const headers = rows[0];
     const data = rows.slice(1).map(row => {
@@ -13,7 +12,6 @@ export async function getDecisionTreeData() {
       });
       return obj;
     });
-
     return data;
   } catch (error) {
     console.error("Error fetching sheet data:", error);
