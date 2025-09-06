@@ -1,23 +1,28 @@
 import axios from "axios";
 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec"; // Replace with your deployed web app URL
+export async function fetchSheetData(type) {
+  const urls = {
+    decisiontree: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv",
+    agents: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv",
+  };
 
-export async function fetchDecisionTree() {
   try {
-    const response = await axios.get(`${WEB_APP_URL}?data=decisiontree`);
-    return response.data; // This should be an array of nodes
-  } catch (error) {
-    console.error("Error fetching decision tree:", error);
-    return [];
-  }
-}
+    const response = await axios.get(urls[type]);
+    const rows = response.data.split("\n").map((row) => row.split(","));
 
-export async function fetchAgents() {
-  try {
-    const response = await axios.get(`${WEB_APP_URL}?data=agents`);
-    return response.data; // This should be an array of agent names
+    if (type === "agents") {
+      return rows.flat().filter(Boolean); // returns array of agent names
+    }
+
+    // For decision tree, map CSV into objects
+    const headers = ["NodeID", "Label", "Option", "NextNodeID", "OptionType"];
+    return rows.map((r) => {
+      let obj = {};
+      headers.forEach((h, i) => obj[h] = r[i] || "");
+      return obj;
+    });
   } catch (error) {
-    console.error("Error fetching agents:", error);
+    console.error("Error fetching sheet data:", error);
     return [];
   }
 }
