@@ -44,7 +44,8 @@ function App() {
   };
 
   // Start decision tree after selecting agent
-  const startDecisionTree = () => {
+  const startDecisionTree = (selectedAgent) => {
+    setAgent(selectedAgent);
     const startNode = decisionTree.find((n) => String(n.NodeID) === "1");
     setCurrentNode(startNode || null);
     setHistory([]);
@@ -92,28 +93,28 @@ function App() {
     <div className="p-6 max-w-xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Dynamic Decision Tree</h1>
 
+      {/* Greeting message (only after agent is chosen) */}
+      {agent && (
+        <div className="mb-6 p-3 bg-blue-100 rounded text-blue-800 font-medium">
+          👋 Hello, <span className="font-bold">{agent}</span>! Welcome back.
+        </div>
+      )}
+
       {/* Step 1: Select Agent */}
       {!agent && (
         <div>
           <h2 className="text-lg mb-2">Select your name:</h2>
-          <select
-            className="border rounded p-2 w-full"
-            onChange={(e) => setAgent(e.target.value)}
-          >
-            <option value="">-- Select Agent --</option>
+          <div className="space-y-2">
             {agents.map((a, i) => (
-              <option key={i} value={a}>
+              <button
+                key={i}
+                onClick={() => startDecisionTree(a)}
+                className="block w-full px-4 py-2 bg-blue-500 text-white rounded"
+              >
                 {a}
-              </option>
+              </button>
             ))}
-          </select>
-          <button
-            onClick={startDecisionTree}
-            disabled={!agent}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-          >
-            Start
-          </button>
+          </div>
         </div>
       )}
 
@@ -141,7 +142,7 @@ function App() {
             currentNode.Option.includes("MESSAGE") &&
             copied && (
               <p className="mt-2 text-sm text-green-600">
-                Message copied to clipboard!
+                📋 Message copied to clipboard!
               </p>
             )}
 
@@ -167,7 +168,7 @@ function App() {
       {/* End of tree */}
       {agent && !currentNode && (
         <div className="mt-4">
-          <p className="mb-4">End of the decision tree.</p>
+          <p className="mb-4">🎉 End of the decision tree.</p>
           <button
             onClick={restart}
             className="px-4 py-2 bg-red-500 text-white rounded"
