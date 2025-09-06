@@ -1,139 +1,152 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
-const DECISION_TREE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
-
-async function fetchCSV(url) {
-  try {
-    const response = await axios.get(url);
-    const rows = response.data.split("\n").map(r => r.split(","));
-    const headers = rows[0];
-    return rows.slice(1).map(r => {
-      let obj = {};
-      headers.forEach((h, i) => {
-        obj[h.trim()] = r[i]?.trim();
-      });
-      if (obj.NodeID) obj.NodeID = Number(obj.NodeID);
-      if (obj.NextNodeID) obj.NextNodeID = Number(obj.NextNodeID);
-      return obj;
-    });
-  } catch (err) {
-    console.error("Error fetching CSV:", err);
-    return [];
-  }
-}
-
 function App() {
   const [agents, setAgents] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState(null);
   const [nodes, setNodes] = useState([]);
-  const [agent, setAgent] = useState(null);
   const [currentNode, setCurrentNode] = useState(null);
   const [history, setHistory] = useState([]);
 
+  // Apps Script URLs
+  const AGENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
+  const NODES_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
+
   useEffect(() => {
-    fetchCSV(AGENTS_CSV).then(setAgents);
-    fetchCSV(DECISION_TREE_CSV).then(setNodes);
+    fetchAgents();
+    fetchNodes();
   }, []);
 
-  useEffect(() => {
-    if (agent && nodes.length > 0 && !currentNode) {
-      const firstNode = nodes.find(n => n.NodeID === 1);
-      setCurrentNode(firstNode);
+  const fetchAgents = async () => {
+    try {
+      const res = await axios.get(AGENTS_URL);
+      if (Array.isArray(res.data)) setAgents(res.data);
+    } catch (err) {
+      console.error("Error fetching agents:", err);
     }
-  }, [agent, nodes, currentNode]);
-
-  const handleAgentSelect = (name) => {
-    setAgent(name);
   };
 
-  const handleNext = (option) => {
-    axios.post("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", {
-      Agent: agent,
+  const fetchNodes = async () => {
+    try {
+      const res = await axios.get(NODES_URL);
+      if (Array.isArray(res.data)) setNodes(res.data);
+    } catch (err) {
+      console.error("Error fetching nodes:", err);
+    }
+  };
+
+  const handleAgentSelect = (agent) => {
+    setSelectedAgent(agent);
+    // Start at NodeID 1
+    const node1 = nodes.find((n) => n.NodeID === 1);
+    setCurrentNode(node1);
+    setHistory([node1]);
+  };
+
+  const handleOptionClick = (option) => {
+    if (!option.NextNodeID) return;
+
+    const nextNode =
+      option.OptionType === "RESTART"
+        ? null
+        : nodes.find((n) => n.NodeID === option.NextNodeID);
+
+    if (option.OptionType === "MESSAGE") {
+      alert("Message: " + option.Option);
+    }
+
+    setCurrentNode(nextNode);
+    setHistory((prev) => (nextNode ? [...prev, nextNode] : prev));
+
+    // Optionally, log action to Google Sheet via POST
+    logAction({
+      Agent: selectedAgent,
+      Action: "Selected Option",
       NodeID: option.NodeID,
       Label: option.Label,
       OptionSelected: option.Option,
       NextNodeID: option.NextNodeID,
-      Action: "Selected"
-    }).catch(console.error);
-
-    setHistory(prev => [...prev, currentNode]);
-
-    const nextNode = nodes.find(n => n.NodeID === option.NextNodeID);
-    setCurrentNode(nextNode);
+    });
   };
 
   const handleBack = () => {
-    const prevHistory = [...history];
-    const lastNode = prevHistory.pop();
-    setHistory(prevHistory);
-    setCurrentNode(lastNode);
+    if (history.length <= 1) return;
+    const newHistory = history.slice(0, history.length - 1);
+    setHistory(newHistory);
+    setCurrentNode(newHistory[newHistory.length - 1]);
   };
 
   const handleRestart = () => {
-    const firstNode = nodes.find(n => n.NodeID === 1);
-    setCurrentNode(firstNode);
+    setSelectedAgent(null);
+    setCurrentNode(null);
     setHistory([]);
   };
 
-  const handleCopy = (text) => {
-    navigator.clipboard.writeText(text);
-    alert("Message copied!");
+  const logAction = async (data) => {
+    try {
+      await axios.post("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", data);
+    } catch (err) {
+      console.error("Error logging action:", err);
+    }
   };
 
-  if (!agents.length || !nodes.length) return <div>Loading...</div>;
-
-  if (!agent) {
-    return (
-      <div>
-        <h2>Select Agent</h2>
-        {agents.map(a => (
-          <button key={a} onClick={() => handleAgentSelect(a)}>
-            {a}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  if (!currentNode) {
-    return (
-      <div>
-        <h2>No node found</h2>
-        <button onClick={handleRestart}>Restart</button>
-      </div>
-    );
-  }
-
-  const options = nodes.filter(n => n.NodeID === currentNode.NodeID);
-
   return (
-    <div>
-      <h3>Agent: {agent}</h3>
-      <h2>{currentNode.Label}</h2>
-      <div style={{ marginTop: "10px" }}>
-        {options.map(opt => {
-          if (opt.OptionType === "MESSAGE") {
-            return (
-              <div key={opt.Option} style={{ marginBottom: "10px" }}>
-                <div>{opt.Option}</div>
-                <button onClick={() => handleCopy(opt.Option)}>Copy Message</button>
-                <button onClick={handleRestart} style={{ marginLeft: "5px" }}>Restart</button>
-              </div>
-            );
-          }
-          return (
+    <div style={{ padding: "20px", fontFamily: "Arial" }}>
+      <h2>Dynamic Decision Tree</h2>
+
+      {!selectedAgent && (
+        <div>
+          <h3>Select Agent</h3>
+          {agents.map((agent) => (
             <button
-              key={opt.Option}
-              onClick={() => handleNext(opt)}
-              style={{ display: "block", margin: "5px 0" }}
+              key={agent}
+              onClick={() => handleAgentSelect(agent)}
+              style={{ margin: "5px", padding: "10px" }}
             >
-              {opt.Option}
+              {agent}
             </button>
-          );
-        })}
-      </div>
-      {history.length > 0 && <button onClick={handleBack}>Back</button>}
+          ))}
+        </div>
+      )}
+
+      {selectedAgent && currentNode && (
+        <div>
+          <h3>Agent: {selectedAgent}</h3>
+          <p>
+            <strong>{currentNode.Label}</strong>
+          </p>
+          {nodes
+            .filter((n) => n.NodeID === currentNode.NodeID)
+            .map((node) => (
+              <div key={node.Option + node.NextNodeID}>
+                {node.OptionType === "MESSAGE" ? (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(node.Option);
+                      alert("Message copied!");
+                    }}
+                    style={{ margin: "5px", padding: "10px" }}
+                  >
+                    {node.Option}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleOptionClick(node)}
+                    style={{ margin: "5px", padding: "10px" }}
+                  >
+                    {node.Option}
+                  </button>
+                )}
+              </div>
+            ))}
+          <div style={{ marginTop: "20px" }}>
+            <button onClick={handleBack} style={{ marginRight: "10px" }}>
+              Back
+            </button>
+            <button onClick={handleRestart}>Restart</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
