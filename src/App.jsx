@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getDecisionTreeData } from "./utils/fetchSheetData.js";
+import { getDecisionTreeData } from "./utils/fetchSheetDataNew.js";
 
 export default function App() {
   const [treeData, setTreeData] = useState([]);
