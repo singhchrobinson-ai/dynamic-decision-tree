@@ -1,96 +1,112 @@
-import { useState, useEffect } from "react";
-import { fetchCSVData } from "./utils/fetchSheetData";
+import React, { useState, useEffect } from "react";
+import { fetchSheetData } from "./utils/fetchSheetData";
 
-// Replace with your published CSV links
-const NODES_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
-const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
+const NODES_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv"; // Replace with your Nodes CSV link
+const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv"; // Replace with your Agents CSV link
 
 function App() {
   const [agents, setAgents] = useState([]);
-  const [selectedAgent, setSelectedAgent] = useState("");
-  const [nodes, setNodes] = useState([]);
-  const [currentNodeId, setCurrentNodeId] = useState("start"); // assuming start node ID
-  const [history, setHistory] = useState([]); // To store navigation history
+  const [selectedAgent, setSelectedAgent] = useState(null);
 
-  // Load CSV data
+  const [nodes, setNodes] = useState([]); // Holds all nodes from Google Sheet
+  const [currentNodeId, setCurrentNodeId] = useState(null);
+  const [history, setHistory] = useState([]); // Keeps track of navigation for back button
+
+  // Load agents
   useEffect(() => {
-    fetchCSVData(AGENTS_CSV).then(setAgents);
-    fetchCSVData(NODES_CSV).then(setNodes);
+    fetchSheetData(AGENTS_CSV).then((data) => {
+      setAgents(data.map((row) => row[0])); // Assuming agent names are in first column
+    });
   }, []);
 
-  // Get current node data based on ID
-  const currentNode = nodes.find(node => node[0] === currentNodeId);
+  // Load nodes
+  useEffect(() => {
+    fetchSheetData(NODES_CSV).then((data) => {
+      setNodes(data);
+      if (data.length > 0) setCurrentNodeId(data[0][0]); // Set first node as starting node
+    });
+  }, []);
 
-  // Handle node button click
+  const handleAgentSelect = (agent) => {
+    setSelectedAgent(agent);
+  };
+
   const handleNodeClick = (nextNodeId) => {
-    setHistory(prev => [...prev, currentNodeId]); // Add current node to history
+    setHistory((prev) => [...prev, currentNodeId]);
     setCurrentNodeId(nextNodeId);
   };
 
-  // Handle back button click
-  const handleBackClick = () => {
+  const handleBack = () => {
     if (history.length === 0) return;
-    const previousNodeId = history[history.length - 1];
-    setHistory(prev => prev.slice(0, prev.length - 1));
-    setCurrentNodeId(previousNodeId);
+    const prevHistory = [...history];
+    const lastNode = prevHistory.pop();
+    setHistory(prevHistory);
+    setCurrentNodeId(lastNode);
   };
 
-  // Render agent selection
+  const handleRestart = () => {
+    if (nodes.length > 0) {
+      setCurrentNodeId(nodes[0][0]);
+      setHistory([]);
+    }
+  };
+
+  const currentNode = nodes.find((node) => node[0] === currentNodeId);
+
   if (!selectedAgent) {
     return (
       <div style={{ padding: "20px" }}>
-        <h2>Select your agent name:</h2>
+        <h2>Select Agent</h2>
         {agents.map((agent, idx) => (
           <button
             key={idx}
             style={{ margin: "5px", padding: "10px 20px" }}
-            onClick={() => setSelectedAgent(agent[0])}
+            onClick={() => handleAgentSelect(agent)}
           >
-            {agent[0]}
+            {agent}
           </button>
         ))}
       </div>
     );
   }
 
-  // Render decision tree nodes
+  if (!currentNode) {
+    return <div>Loading nodes...</div>;
+  }
+
   return (
     <div style={{ padding: "20px" }}>
-      <h2>Welcome, {selectedAgent}!</h2>
-      {currentNode ? (
-        <div>
-          <h3>{currentNode[1]}</h3>
-          <div style={{ marginTop: "15px" }}>
-            {currentNode.slice(2).map((nextNodeId, idx) => (
-              <button
-                key={idx}
-                style={{ margin: "5px", padding: "10px 20px" }}
-                onClick={() => handleNodeClick(nextNodeId)}
-              >
-                {nextNodeId}
-              </button>
-            ))}
-          </div>
-          {history.length > 0 && (
+      <h2>Agent: {selectedAgent}</h2>
+      <h3>{currentNode[1]}</h3> {/* Node Label */}
+
+      <div>
+        {currentNode.slice(2).length > 0 ? (
+          currentNode.slice(2).map((nextNodeId, idx) => (
             <button
-              style={{ marginTop: "15px", padding: "10px 20px" }}
-              onClick={handleBackClick}
+              key={idx}
+              style={{ margin: "5px", padding: "10px 20px" }}
+              onClick={() => handleNodeClick(nextNodeId)}
             >
-              Back
+              {nextNodeId}
             </button>
-          )}
-        </div>
-      ) : (
-        <div>
-          <h3>End of this path</h3>
-          <button
-            style={{ marginTop: "15px", padding: "10px 20px" }}
-            onClick={() => setCurrentNodeId("start")}
-          >
-            Restart
-          </button>
-        </div>
-      )}
+          ))
+        ) : (
+          <div>No further options</div>
+        )}
+      </div>
+
+      <div style={{ marginTop: "20px" }}>
+        <button
+          style={{ marginRight: "10px", padding: "10px 20px" }}
+          onClick={handleBack}
+          disabled={history.length === 0}
+        >
+          Back
+        </button>
+        <button style={{ padding: "10px 20px" }} onClick={handleRestart}>
+          Restart
+        </button>
+      </div>
     </div>
   );
 }
