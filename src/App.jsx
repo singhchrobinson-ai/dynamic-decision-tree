@@ -1,155 +1,144 @@
 import React, { useState, useEffect } from "react";
-import { fetchSheetData } from "./utils/fetchSheetData";
+import axios from "axios";
 
-const DECISION_TREE_CSV =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv"; // Replace with your published Google Sheet CSV for nodes
-const AGENTS_CSV =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv"; // Replace with your published Google Sheet CSV for agents
+// Replace these with your published CSV URLs
+const AGENTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=1758495549&single=true&output=csv";
+const DECISION_TREE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKb0pyaGYBMYlRy8WIvUN1XIDcYpsycWuifS3I6oQFu42zbj6Sbf63xbjOlDr9mDTMoTEWo1EbatNa/pub?gid=0&single=true&output=csv";
+
+// Utility to fetch CSV and parse into arrays of objects
+async function fetchSheetData(url) {
+  try {
+    const response = await axios.get(url);
+    const rows = response.data.split("\n").map(r => r.split(","));
+    const headers = rows[0];
+    return rows.slice(1).map(r => {
+      let obj = {};
+      headers.forEach((h, i) => {
+        obj[h.trim()] = r[i]?.trim();
+      });
+      // Convert NodeID and NextNodeID to numbers
+      if (obj.NodeID) obj.NodeID = Number(obj.NodeID);
+      if (obj.NextNodeID) obj.NextNodeID = Number(obj.NextNodeID);
+      return obj;
+    });
+  } catch (error) {
+    console.error("Error fetching sheet data:", error);
+    return [];
+  }
+}
 
 function App() {
   const [agents, setAgents] = useState([]);
   const [nodes, setNodes] = useState([]);
-  const [selectedAgent, setSelectedAgent] = useState(
-    localStorage.getItem("selectedAgent") || ""
-  );
-  const [currentNodeID, setCurrentNodeID] = useState("1"); // Start at Node 1
-  const [nodeHistory, setNodeHistory] = useState([]);
-  const [currentOptions, setCurrentOptions] = useState([]);
-  const [messageCopied, setMessageCopied] = useState(false);
+  const [agent, setAgent] = useState(null);
+  const [currentNode, setCurrentNode] = useState(null);
+  const [history, setHistory] = useState([]);
 
-  // Fetch agents
+  // Load agents and nodes on mount
   useEffect(() => {
-    fetchSheetData(AGENTS_CSV).then((data) => {
-      setAgents(data);
-    });
+    fetchSheetData(AGENTS_CSV).then(setAgents);
+    fetchSheetData(DECISION_TREE_CSV).then(setNodes);
   }, []);
 
-  // Fetch nodes
+  // When agent is selected, start with first node (NodeID=1)
   useEffect(() => {
-    fetchSheetData(DECISION_TREE_CSV).then((data) => {
-      // Parse CSV rows to objects
-      const headers = data[0];
-      const nodeRows = data.slice(1).map((row) => {
-        let obj = {};
-        headers.forEach((h, i) => (obj[h] = row[i]));
-        return obj;
-      });
-      setNodes(nodeRows);
-    });
-  }, []);
+    if (agent && nodes.length > 0) {
+      const firstNode = nodes.find(n => n.NodeID === 1);
+      setCurrentNode(firstNode);
+      setHistory([]);
+    }
+  }, [agent, nodes]);
 
-  // Update current options whenever currentNodeID or nodes change
-  useEffect(() => {
-    if (nodes.length === 0) return;
-    const options = nodes.filter(
-      (n) => Number(n.NodeID) === Number(currentNodeID)
-    );
-    setCurrentOptions(options);
-  }, [currentNodeID, nodes]);
+  if (!agents.length || !nodes.length) return <div>Loading...</div>;
 
-  const handleAgentSelect = (agent) => {
-    setSelectedAgent(agent);
-    localStorage.setItem("selectedAgent", agent);
-    setCurrentNodeID("1"); // Start from Node 1
-    setNodeHistory([]);
+  const handleAgentSelect = (name) => {
+    setAgent(name);
   };
 
-  const handleOptionSelect = (option) => {
-    if (option.OptionType === "MESSAGE") {
-      setMessageCopied(false); // Reset copy notification
-    }
-    if (option.NextNodeID) {
-      setNodeHistory([...nodeHistory, currentNodeID]);
-      setCurrentNodeID(option.NextNodeID);
-    }
+  const handleNext = (option) => {
+    // Log the action to Google Sheets via Apps Script endpoint (adjust URL)
+    axios.post("https://script.google.com/macros/s/AKfycbwbHD3sSBjGXtI_jDIA7BHkPfAGyaAnDaO3Is1LUotTxRDsDIWYC8tzdX4YxB3IbCyy/exec", {
+      Agent: agent,
+      NodeID: option.NodeID,
+      Label: option.Label,
+      OptionSelected: option.Option,
+      NextNodeID: option.NextNodeID,
+      Action: "Selected"
+    }).catch(console.error);
+
+    // Update history for back button
+    setHistory(prev => [...prev, currentNode]);
+
+    // Move to next node
+    const nextNode = nodes.find(n => n.NodeID === option.NextNodeID);
+    setCurrentNode(nextNode);
   };
 
   const handleBack = () => {
-    if (nodeHistory.length === 0) return;
-    const prevNodeID = nodeHistory[nodeHistory.length - 1];
-    setNodeHistory(nodeHistory.slice(0, -1));
-    setCurrentNodeID(prevNodeID);
+    const prev = [...history];
+    const lastNode = prev.pop();
+    setHistory(prev);
+    setCurrentNode(lastNode);
   };
 
   const handleRestart = () => {
-    setCurrentNodeID("1");
-    setNodeHistory([]);
+    setCurrentNode(nodes.find(n => n.NodeID === 1));
+    setHistory([]);
   };
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
-    setMessageCopied(true);
-    setTimeout(() => setMessageCopied(false), 2000);
+    alert("Message copied to clipboard!");
   };
 
+  if (!agent) {
+    return (
+      <div>
+        <h2>Select Agent</h2>
+        {agents.map(a => (
+          <button key={a} onClick={() => handleAgentSelect(a)}>
+            {a}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (!currentNode) {
+    return (
+      <div>
+        <h2>No Node Found</h2>
+        <button onClick={handleRestart}>Restart</button>
+      </div>
+    );
+  }
+
+  const options = nodes.filter(n => n.NodeID === currentNode.NodeID);
+
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial" }}>
-      {!selectedAgent ? (
-        <div>
-          <h2>Select Agent</h2>
-          {agents.map((agent) => (
-            <button
-              key={agent}
-              onClick={() => handleAgentSelect(agent)}
-              style={{
-                margin: "5px",
-                padding: "10px 20px",
-                cursor: "pointer",
-              }}
-            >
-              {agent}
+    <div>
+      <h3>Agent: {agent}</h3>
+      <h2>{currentNode.Label}</h2>
+      <div style={{ marginTop: "10px" }}>
+        {options.map(opt => {
+          if (opt.OptionType === "MESSAGE") {
+            return (
+              <div key={opt.Option} style={{ marginBottom: "10px" }}>
+                <div>{opt.Option}</div>
+                <button onClick={() => handleCopy(opt.Option)}>Copy Message</button>
+                <button onClick={handleRestart} style={{ marginLeft: "5px" }}>Restart</button>
+              </div>
+            );
+          }
+          // Regular option button
+          return (
+            <button key={opt.Option} onClick={() => handleNext(opt)} style={{ display: "block", margin: "5px 0" }}>
+              {opt.Option}
             </button>
-          ))}
-        </div>
-      ) : (
-        <div>
-          <h2>Agent: {selectedAgent}</h2>
-          {currentOptions.length > 0 ? (
-            <div>
-              {currentOptions.map((option, idx) => (
-                <div key={idx} style={{ margin: "10px 0" }}>
-                  {option.OptionType === "OPTION" && (
-                    <button
-                      onClick={() => handleOptionSelect(option)}
-                      style={{
-                        padding: "10px 20px",
-                        cursor: "pointer",
-                        marginRight: "10px",
-                      }}
-                    >
-                      {option.Option}
-                    </button>
-                  )}
-                  {option.OptionType === "MESSAGE" && (
-                    <div>
-                      <p>{option.Label}</p>
-                      <button onClick={() => handleCopy(option.Label)}>
-                        Copy Message
-                      </button>
-                      {messageCopied && <span> Message copied!</span>}
-                      {option.NextNodeID && (
-                        <button
-                          onClick={handleRestart}
-                          style={{ marginLeft: "10px" }}
-                        >
-                          Restart
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {nodeHistory.length > 0 && (
-                <button onClick={handleBack} style={{ marginTop: "10px" }}>
-                  Back
-                </button>
-              )}
-            </div>
-          ) : (
-            <p>Loading nodes...</p>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
+      {history.length > 0 && <button onClick={handleBack}>Back</button>}
     </div>
   );
 }
